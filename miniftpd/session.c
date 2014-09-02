@@ -13,6 +13,7 @@ void session_init(session_t *sess)
     memset(sess->args,0x00,sizeof(sess->args));
     sess->p_addr=NULL;
    sess->data_fd = -1;
+   sess->listen_fd = -1;
 }
 
 void session_begin(session_t *sess)

@@ -1,6 +1,6 @@
 #ifndef COMMON_H
 #define COMMON_H 
-
+#include <strings.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +22,8 @@
 #include <shadow.h>
 #include <dirent.h>
 #include <time.h>
+#include <net/if.h>
+#include <sys/ioctl.h>
 
 #define ERR_EXIT(m) \
     do { \

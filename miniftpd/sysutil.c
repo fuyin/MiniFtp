@@ -75,7 +75,9 @@ int tcp_server(const char *host, unsigned short port)
 
 int get_local_ip(char *ip)
 {
-        char host[100] = {0};
+/*错误ip获取方式 只获取了127.0.0.1是本地回环地址
+ * 应该绑定eth0第一块网卡通过套接字获取
+ char host[100] = {0};
         if (gethostname(host, sizeof(host)) < 0)
                 return -1;
         struct hostent *hp;
@@ -84,6 +86,23 @@ int get_local_ip(char *ip)
 
         strcpy(ip, inet_ntoa(*(struct in_addr*)hp->h_addr));
         return 0;
+        */
+    int sockfd;
+    if((sockfd = socket(PF_INET,SOCK_STREAM,0))==-1)
+    {
+        ERR_EXIT("socket");
+    }
+    struct ifreq req;
+
+    bzero(&req,sizeof(req));
+    strcpy(req.ifr_name,"eth0");
+    if(ioctl(sockfd,SIOCGIFADDR,&req) == -1)
+        ERR_EXIT("ioctl");
+    
+    struct sockaddr_in *host = (struct sockaddr_in *)&req.ifr_addr;
+    strcpy(ip,inet_ntoa(host->sin_addr));
+    close(sockfd);
+    return 1;
 }
 
 
@@ -255,7 +274,6 @@ int connect_timeout(int fd, struct sockaddr_in *addr, unsigned int wait_seconds)
         ret = connect(fd, (struct sockaddr*)addr, addrlen);
         if (ret < 0 && errno == EINPROGRESS)
         {
-                printf("AAAAA\n");
                 fd_set connect_fdset;
                 struct timeval timeout;
                 FD_ZERO(&connect_fdset);
@@ -276,7 +294,6 @@ int connect_timeout(int fd, struct sockaddr_in *addr, unsigned int wait_seconds)
                         return -1;
                 else if (ret == 1)
                 {
-                        printf("BBBBB\n");
                         /* ret返回为1，可能有两种情况，一种是连接建立成功，一种是套接字产生错误，*/
                         /* 此时错误信息不会保存至errno变量中，因此，需要调用getsockopt来获取。 */
                         int err;
@@ -288,7 +305,6 @@ int connect_timeout(int fd, struct sockaddr_in *addr, unsigned int wait_seconds)
                         }
                         if (err == 0)
                         {
-                                printf("DDDDDDD\n");
                                 ret = 0;
                         }
                         else

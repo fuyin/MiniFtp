@@ -18,6 +18,8 @@ typedef struct
 
     struct sockaddr_in *p_addr;//port模式下对方的ip和port
     int data_fd;//数据传输fd
+
+    int listen_fd;//PASV被动模式下监听的fd
 }session_t;
  int clientcount;
 void session_init(session_t *sess);

@@ -1,5 +1,33 @@
 #include "sysutil.h"
 
+
+
+int tcp_client(unsigned int port)
+{
+    int sockfd;
+    if((sockfd = socket(PF_INET, SOCK_STREAM, 0)) == -1)
+        ERR_EXIT("socket");
+
+    if(port > 0)
+    {
+        int on = 1;
+        if((setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (const char *)&on, sizeof(on))) == -1)
+            ERR_EXIT("setsockopt");
+
+        struct sockaddr_in addr;
+        memset(&addr, 0, sizeof addr);
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(port);
+        char ip[16] = {0};
+        get_local_ip(ip);
+        addr.sin_addr.s_addr = inet_addr(ip);
+
+        if(bind(sockfd, (struct sockaddr *)&addr, sizeof addr) == -1)
+            ERR_EXIT("bind");
+    }
+
+    return sockfd;
+}
 /**
 * tcp_server - 启动tcp服务器
 * @host: 服务器IP地址或者服务器主机名
@@ -45,7 +73,7 @@ int tcp_server(const char *host, unsigned short port)
         return listenfd;
 }
 
-int getlocalip(char *ip)
+int get_local_ip(char *ip)
 {
         char host[100] = {0};
         if (gethostname(host, sizeof(host)) < 0)
@@ -367,7 +395,7 @@ ssize_t recv_peek(int sockfd, void *buf, size_t len)
 */
 ssize_t readline(int sockfd, void *buf, size_t maxline)
 {
-        int ret;
+/*        int ret;
         int nread;
         char *bufp = buf;
         int nleft = maxline;
@@ -405,6 +433,51 @@ ssize_t readline(int sockfd, void *buf, size_t maxline)
         }
 
         return -1;
+        */
+    int nread;  //一次IO读取的数量
+    int nleft;  //还剩余的字节数
+    char *ptr;  //存放数据的指针的位置
+    int ret;    //readn的返回值
+    int total = 0;  //目前总共读取的字节数
+
+    nleft = maxline-1;
+    ptr = buf;
+
+    while (nleft > 0) {
+        //这一次调用仅仅是预览数据
+        //并没有真的把数据从缓冲区中取走
+        ret = recv_peek(sockfd, ptr, nleft);
+        //注意这里读取的字节不够，绝对不是错误！！！
+        if (ret <= 0) {
+            return ret;
+        }
+
+        nread = ret;
+        int i;
+        for (i = 0; i < nread; ++i) {
+            if (ptr[i] == '\n') {
+                //这里才是真正的读取过程
+                ret = readn(sockfd, ptr, i + 1);
+                if (ret != i + 1) {
+                    return -1;
+                }
+                total += ret;
+                ptr += ret;
+                *ptr = 0;
+                return total;   //返回此行的长度 '\n'包含在其中
+            }
+        }
+        //如果没有发现\n，这些数据应全部接收
+        ret = readn(sockfd, ptr, nread);
+        if (ret != nread) {
+            return -1;
+        }
+        nleft -= nread;
+        total += nread;
+        ptr += nread;
+    }
+    *ptr = 0;
+    return maxline-1;
 }
 
 void send_fd(int sock_fd, int fd)

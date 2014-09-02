@@ -3,13 +3,14 @@
 #include "sysutil.h"
 #include "strutil.h"
 #include "command_map.h"
+//#define DEBUG
 void clean_command(session_t *);
 void handle_proto(session_t *sess)
 {
           ftp_reply(sess,FTP_GREET,"FTP Server 1.0");
         while(1)
         {
-          int ret = readline(sess->peerfd,sess->command,sizeof sess->command );
+          int ret = readline(sess->peerfd,sess->command,1024 );
           if(ret==-1 )
           {
             if(errno == EINTR)
@@ -18,6 +19,9 @@ void handle_proto(session_t *sess)
           }
           else if(ret==0)
               exit(EXIT_SUCCESS);
+#ifdef DEBUG
+            printf("%s\n",sess->command);
+#endif
           str_trim_crlf(sess->command);
           str_split(sess->command,sess->comm,sess->args,' ');
           printf("COMMD=[%s],ARGS=[%s]\n",sess->comm,sess->args);

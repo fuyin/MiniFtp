@@ -1,4 +1,5 @@
 #include "command_map.h"
+#include "trans_data.h"
 #include "sysutil.h"
 #include "ftp_code.h"
 #include "strutil.h"
@@ -165,6 +166,28 @@ void do_quit(session_t *sess)
 
 void do_port(session_t *sess)
 {
+    //设置主动工作模式 
+    //PORT 192,168,44,1,200,174
+    unsigned int v[6]={0};
+    sscanf(sess->args,"%u,%u,%u,%u,%u,%u",&v[0],&v[1],&v[2],&v[3],&v[4],&v[5]);
+
+    sess->p_addr = (struct sockaddr_in *) malloc(sizeof(struct sockaddr_in));
+    memset(sess->p_addr,0,sizeof(struct sockaddr_in));
+    sess->p_addr->sin_family =AF_INET;
+
+    char *p=(char*)&sess->p_addr->sin_port;
+    p[0]=v[4];
+    p[1]=v[5];
+
+    p=(char *)&sess->p_addr->sin_addr.s_addr;
+    p[0]=v[0];
+    p[1]=v[1];
+    p[2]=v[2];
+    p[3]=v[3];
+
+    ftp_reply(sess,FTP_PORTOK,"PORT command sucessful");
+
+
 
 }
 
@@ -219,7 +242,16 @@ void do_appe(session_t *sess)
 
 void do_list(session_t *sess)
 {
-
+    int fd=tcp_client(0);
+    int ret = connect_timeout(fd,sess->p_addr,tunable_connect_timeout);
+    if(ret == -1)
+        return ;
+    sess->data_fd =fd;
+    ftp_reply(sess,FTP_DATACONN,"Here comes the directory listing.");
+    trans_list(sess);
+    close(fd);
+    sess->data_fd = -1;
+    ftp_reply(sess,FTP_TRANSFEROK,"Directory send OK.");
 }
 
 void do_nlst(session_t *sess)

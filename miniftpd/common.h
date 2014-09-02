@@ -20,6 +20,9 @@
 #include <sys/wait.h>
 #include <crypt.h>
 #include <shadow.h>
+#include <dirent.h>
+#include <time.h>
+
 #define ERR_EXIT(m) \
     do { \
         perror(m);\

@@ -15,12 +15,13 @@ int main(int argc, const char *argv[])
     signal(SIGCHLD,handle_chld);
     signal(SIGPIPE,SIG_IGN);
 
-    parse_conf_load_file("ftp.conf");
-    print_conf();
-
     do_root();
+
+    parse_conf_load_file("ftp.conf");
+    //print_conf();
+
     //create a listenfd
-    printf("%s\n",tunable_listen_address);
+      printf("local(listen) address %s\n",tunable_listen_address);
     int listenfd=tcp_server(tunable_listen_address,tunable_listen_port);
 
     int pid;

@@ -144,6 +144,7 @@ void do_pass(session_t *sess)
     umask(tunable_local_umask);
 
     ftp_reply(sess, FTP_LOGINOK, "Login successful.");
+    chdir("sess->args");
 }
 
 

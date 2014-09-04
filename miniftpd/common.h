@@ -24,6 +24,10 @@
 #include <time.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
+#include <stdint.h>
+#include <linux/capability.h>
+#include <sys/syscall.h>
+#include <bits/syscall.h>
 
 #define ERR_EXIT(m) \
     do { \

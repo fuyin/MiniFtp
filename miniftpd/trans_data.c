@@ -1,12 +1,75 @@
 #include "trans_data.h"
+#include "ftp_code.h"
+#include "command_map.h"
 #include "common.h"
 #include "sysutil.h"
+#include "configure.h"
+#include "priv_sock.h"
+#include "priv_command.h"
 
 static const char *statbuf_get_perms(struct stat *sbuf);
 static const char *statbuf_get_date(struct stat *sbuf);
 static const char *statbuf_get_filename(struct stat *sbuf, const char *name);
 static const char *statbuf_get_user_info(struct stat *sbuf);
 static const char *statbuf_get_size(struct stat *sbuf);
+
+static int is_port_active(session_t *sess);
+static int is_pasv_active(session_t *sess);
+
+//返回值表示成功与否,主动被动模式下的fd
+int get_trans_data_fd(session_t *sess)
+{
+    int is_port = is_port_active(sess);
+    int is_pasv = is_pasv_active(sess);
+    if(!is_port && !is_pasv)
+    {
+          ftp_reply(sess, FTP_BADSENDCONN, "Use PORT or PASV first.");
+          exit(EXIT_FAILURE);
+    }
+
+    if(is_port && is_pasv)
+    {
+        fprintf(stderr, "both of PORT and PASV are active\n");
+                exit(EXIT_FAILURE);
+    }
+
+    if(is_port)
+    {
+        priv_sock_send_cmd(sess->proto_fd,PRIV_SOCK_GET_DATA_SOCK);
+        char *ip = inet_ntoa(sess->p_addr->sin_addr);
+        uint16_t port = ntohs(sess->p_addr->sin_port);
+        priv_sock_send_str(sess->proto_fd,ip,strlen(ip));
+        priv_sock_send_int(sess->proto_fd,port);
+
+        //recv result
+        char result = priv_sock_recv_result(sess->proto_fd);
+        if(result == PRIV_SOCK_RESULT_BAD)
+        {
+            fprintf(stderr,"get data fd err");
+            exit(EXIT_FAILURE);
+        }
+        sess->data_fd=priv_sock_recv_fd(sess->proto_fd);
+
+        free(sess->p_addr);
+        sess->p_addr=NULL;
+    }
+    if(is_pasv)
+    {
+        priv_sock_send_cmd(sess->proto_fd,PRIV_SOCK_PASV_ACCEPT);
+        char res=priv_sock_recv_result(sess->proto_fd);
+        if(res==PRIV_SOCK_RESULT_BAD)
+        {
+             ftp_reply(sess, FTP_BADCMD, "get pasv data_fd error");
+            fprintf(stderr,"get data fd error");
+            exit(EXIT_FAILURE);
+        }
+        sess->data_fd = priv_sock_recv_fd(sess->proto_fd);
+        //清除PASV模式
+        close(sess->listen_fd);
+        sess->listen_fd=-1;
+    }
+    return 1;
+}
 
 void trans_list(session_t *sess)
 {
@@ -153,4 +216,15 @@ static const char *statbuf_get_size(struct stat *sbuf)
     snprintf(sizebuf,sizeof(sizebuf),"%8lu",(unsigned long) sbuf->st_size);
     return sizebuf;
 
+}
+
+static int is_port_active(session_t *sess)
+{
+    return (sess->p_addr!=NULL);
+}
+
+static int is_pasv_active(session_t *sess)
+{
+    priv_sock_send_cmd(sess->proto_fd,PRIV_SOCK_PASV_ACTIVE);
+    return priv_sock_recv_int(sess->proto_fd);
 }

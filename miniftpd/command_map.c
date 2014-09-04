@@ -1,10 +1,13 @@
 #include "command_map.h"
 #include "trans_data.h"
+#include "trans_data.h"
 #include "sysutil.h"
 #include "ftp_code.h"
 #include "strutil.h"
 #include "common.h"
 #include "configure.h"
+#include "priv_sock.h"
+#include "priv_command.h"
 typedef void (*Func)(session_t *);
 typedef struct command_map
 {
@@ -202,20 +205,24 @@ void do_pasv(session_t *sess)
 {
     char ip[16]={0};
     get_local_ip(ip);
-    int listenfd=tcp_server(ip,0);
-    sess->listen_fd = listenfd;
 
-    //ip和port发送客户端
-    struct sockaddr_in addr;
-    socklen_t len =sizeof(addr);
+    priv_sock_send_cmd(sess->proto_fd,PRIV_SOCK_PASV_LISTEN);
 
-    if(getsockname(listenfd,(struct sockaddr*)&addr,&len) == -1)
-        ERR_EXIT("getsockname");
-
+    char res = priv_sock_recv_result(sess->proto_fd);
+    if(res == PRIV_SOCK_RESULT_BAD)
+    {
+        ftp_reply(sess,FTP_BADCMD,"get listenfd");
+        return;
+    }
+    uint16_t port=priv_sock_recv_int(sess->proto_fd);
     //227 Entering Passive Mode (192,168,44,136,194,6).
     unsigned int v[6];
+    //一种获取ip的实现方式
     sscanf(ip,"%u.%u.%u.%u",&v[0],&v[1],&v[2],&v[3]);
-    unsigned char *p = (unsigned char *)&addr.sin_port;
+    //unsigned char *p = (unsigned char *)&addr.sin_port;
+    //另一种实现
+    uint16_t net_endian_port=htons(port);///网络字节序
+    unsigned char *p = (unsigned char*)&net_endian_port;
     v[4]=p[0];
     v[5]=p[1];
 
@@ -271,14 +278,15 @@ void do_appe(session_t *sess)
 
 void do_list(session_t *sess)
 {
-    int fd=tcp_client(0);
-    int ret = connect_timeout(fd,sess->p_addr,tunable_connect_timeout);
-    if(ret == -1)
-        return ;
-    sess->data_fd =fd;
+    if(get_trans_data_fd(sess)==0)
+    {
+        fprintf(stderr,"gettrans_data_fd error");
+        return;
+    }
+    
     ftp_reply(sess,FTP_DATACONN,"Here comes the directory listing.");
     trans_list(sess);
-    close(fd);
+    close(sess->data_fd);
     sess->data_fd = -1;
     ftp_reply(sess,FTP_TRANSFEROK,"Directory send OK.");
 }

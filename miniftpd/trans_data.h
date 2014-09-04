@@ -2,6 +2,7 @@
 #define TRANS_DATA_H
 #include "session.h"
 void trans_list(session_t *sess);
+int get_trans_data_fd(session_t *sess);
 
 
 #endif  /*TRANS_DATA_H*/

@@ -1,6 +1,7 @@
 #include "session.h"
 #include "ftp_nobody.h"
 #include "ftp_proto.h"
+#include "priv_sock.h"
 void session_init(session_t *sess)
 {
     sess->peerfd = -1;
@@ -19,25 +20,29 @@ void session_init(session_t *sess)
 void session_begin(session_t *sess)
 {
     //build PCI   socketpair
-    int fds[2];
-    if(socketpair(PF_UNIX,SOCK_STREAM,0,fds)==-1)
+    /*加入进程间通信模块后修改
+     * int fds[2];
+    //if(socketpair(PF_UNIX,SOCK_STREAM,0,fds)==-1)
         ERR_EXIT("socketpair");
-    
+    */
     // fork nobody and proto
+    priv_sock_init(sess);
     int pid;
     if((pid=fork())==0)
     {
         printf("client %d proto\n",clientcount);
-        close(fds[0]);
-        sess->proto_fd= fds[1];
+        //close(fds[0]);
+        //sess->proto_fd= fds[1];
+        priv_sock_set_proto_context(sess);
         //handle proto
         handle_proto(sess);
     }
     else if(pid > 0)
     {
         printf("client %d nobody\n",clientcount);
-        close(fds[1]);
-        sess->nobody_fd=fds[0];
+        //close(fds[1]);
+        //sess->nobody_fd=fds[0];
+        priv_sock_set_nobody_context(sess);
         //handle nobody
         handle_nobody(sess);
     }

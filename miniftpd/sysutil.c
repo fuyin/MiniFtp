@@ -1,7 +1,61 @@
 #include "sysutil.h"
 
+int lock_file_read(int fd)
+{
+    // short l_type;    /* Type of lock: F_RDLCK,
+    //                             F_WRLCK, F_UNLCK */
+    //       short l_whence;  /* How to interpret l_start:
+    //                         SEEK_SET, SEEK_CUR, SEEK_END */
+    //   off_t l_start;   /* Starting offset for lock */
+    // off_t l_len;     /* Number of bytes to lock */
+    // pid_t l_pid;     /* PID of process blocking our lock
+    //                               (F_GETLK only) */
+    struct flock lock;
+    memset(&lock,0,sizeof lock);
+    lock.l_type = F_RDLCK;
+    lock.l_whence = SEEK_SET;
+    lock.l_start=0;
+    lock.l_len=0;
+    lock.l_pid=getpid();
 
+    int ret;
+    do
+    {
+    ret = fcntl(fd,F_SETLKW,&lock);
+    }while(ret == -1 && errno == EINTR);
+    return ret;
+}
 
+int lock_file_write(int fd)
+{
+    struct flock lock;
+    memset(&lock,0,sizeof lock);
+    lock.l_type = F_WRLCK;
+    lock.l_whence = SEEK_SET;
+    lock.l_start=0;
+    lock.l_len=0;
+    lock.l_pid=getpid();
+
+    int ret;
+    ret = fcntl(fd,F_SETLK,&lock);
+    return ret;
+    
+}
+int unlock_file(int fd)
+{
+    struct flock lock;
+    memset(&lock,0,sizeof lock);
+    lock.l_type = F_UNLCK;
+    lock.l_whence = SEEK_SET;
+    lock.l_start=0;
+    lock.l_len=0;
+    lock.l_pid=getpid();
+
+    int ret;
+    ret = fcntl(fd,F_SETLK,&lock);
+    return ret;
+    
+}
 int tcp_client(unsigned int port)
 {
     int sockfd;
@@ -309,7 +363,6 @@ int connect_timeout(int fd, struct sockaddr_in *addr, unsigned int wait_seconds)
                         }
                         else
                         {
-                                printf("CCCCCC\n");
                                 errno = err;
                                 ret = -1;
                         }

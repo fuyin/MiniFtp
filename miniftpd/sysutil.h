@@ -1,16 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <sys/select.h>
+#ifndef SYSUTIL_H
+#define SYSUTIL_H 
+
 #include "common.h"
 #define ERR_EXIT(m) \
     do { \
@@ -32,3 +22,8 @@
     ssize_t readline(int sockfd, void *buf, size_t maxline);
     void send_fd(int sock_fd, int fd);
     int recv_fd(const int sock_fd);
+    
+int lock_file_read(int fd);
+int lock_file_write(int fd);
+int unlock_file(int fd);
+#endif  /*SYSUTIL_H*/

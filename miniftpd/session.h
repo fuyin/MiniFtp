@@ -20,6 +20,10 @@ typedef struct
     int data_fd;//数据传输fd
 
     int listen_fd;//PASV被动模式下监听的fd
+
+    uint64_t restart_pos; //文件传输断点
+
+    char * rnfr_name;  //文件重命名 RNTR RNTO
 }session_t;
  int clientcount;
 void session_init(session_t *sess);

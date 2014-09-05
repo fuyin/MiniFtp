@@ -11,7 +11,7 @@ void privop_pasv_get_data_sock(session_t *sess)
     priv_sock_recv_str(sess->nobody_fd,ip,sizeof(ip));
     uint16_t port = priv_sock_recv_int(sess->nobody_fd);
 
-    int data_fd=tcp_client(0);
+    int data_fd=tcp_client(20);
 
     struct sockaddr_in addr;
     memset(&addr,0,sizeof(addr));
@@ -67,6 +67,9 @@ void privop_pasv_accept(session_t *sess)
         ERR_EXIT("accept_timeout");
     }
     
+    //clise listenfd
+    close(sess->listen_fd);
+    sess->listen_fd=-1;
     //给对方回应
     priv_sock_send_result(sess->nobody_fd, PRIV_SOCK_RESULT_OK);
 

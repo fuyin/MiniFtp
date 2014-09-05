@@ -48,6 +48,12 @@ void priv_sock_set_proto_context(session_t *sess)
 void priv_sock_send_cmd(int fd, char cmd)
 {
     int ret = writen(fd, &cmd, sizeof cmd);
+    //子进程关闭
+     if(ret == 0)
+     {
+            printf("Proto close!\n");
+                  exit(EXIT_SUCCESS);
+     }
     if(ret != sizeof(cmd))
     {
         fprintf(stderr, "priv_sock_send_cmd error\n");
@@ -59,6 +65,7 @@ char priv_sock_recv_cmd(int fd)
 {
     char res;
     int ret = readn(fd, &res, sizeof res);
+
     if(ret != sizeof(res))
     {
         

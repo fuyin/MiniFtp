@@ -16,6 +16,10 @@ static const char *statbuf_get_size(struct stat *sbuf);
 static int is_port_active(session_t *sess);
 static int is_pasv_active(session_t *sess);
 
+static void get_port_data_fd(session_t *sess);
+static void get_pasv_data_fd(session_t *sess);
+
+
 //返回值表示成功与否,主动被动模式下的fd
 int get_trans_data_fd(session_t *sess)
 {
@@ -35,38 +39,11 @@ int get_trans_data_fd(session_t *sess)
 
     if(is_port)
     {
-        priv_sock_send_cmd(sess->proto_fd,PRIV_SOCK_GET_DATA_SOCK);
-        char *ip = inet_ntoa(sess->p_addr->sin_addr);
-        uint16_t port = ntohs(sess->p_addr->sin_port);
-        priv_sock_send_str(sess->proto_fd,ip,strlen(ip));
-        priv_sock_send_int(sess->proto_fd,port);
-
-        //recv result
-        char result = priv_sock_recv_result(sess->proto_fd);
-        if(result == PRIV_SOCK_RESULT_BAD)
-        {
-            fprintf(stderr,"get data fd err");
-            exit(EXIT_FAILURE);
-        }
-        sess->data_fd=priv_sock_recv_fd(sess->proto_fd);
-
-        free(sess->p_addr);
-        sess->p_addr=NULL;
+        get_port_data_fd(sess);
     }
     if(is_pasv)
     {
-        priv_sock_send_cmd(sess->proto_fd,PRIV_SOCK_PASV_ACCEPT);
-        char res=priv_sock_recv_result(sess->proto_fd);
-        if(res==PRIV_SOCK_RESULT_BAD)
-        {
-             ftp_reply(sess, FTP_BADCMD, "get pasv data_fd error");
-            fprintf(stderr,"get data fd error");
-            exit(EXIT_FAILURE);
-        }
-        sess->data_fd = priv_sock_recv_fd(sess->proto_fd);
-        //清除PASV模式
-        close(sess->listen_fd);
-        sess->listen_fd=-1;
+        get_pasv_data_fd(sess);
     }
     return 1;
 }
@@ -104,6 +81,33 @@ void trans_list(session_t *sess)
         writen(sess->data_fd, buf, strlen(buf));
     }
     closedir(dir);
+}
+void trans_list_simple(session_t *sess)
+{
+    DIR *dir=opendir(".");
+    if(dir == NULL)
+        ERR_EXIT("opendir");
+    struct dirent *entry;
+    while((entry = readdir(dir)))
+    {
+        if(entry ->d_name[0]=='.')
+            continue;
+        const char *filename=entry->d_name;
+        if(filename[0]=='.')
+            continue;
+
+        char buf[1024]={0};
+        struct stat sbuf;
+
+        if(lstat(filename,&sbuf)==-1)
+            ERR_EXIT("lstat");
+        strcpy(buf, statbuf_get_filename(&sbuf, filename));
+
+        strcat(buf, "\r\n");
+        writen(sess->data_fd, buf, strlen(buf));
+    }
+    closedir(dir);
+
 }
 static const char *statbuf_get_perms(struct stat *sbuf)
 {
@@ -228,3 +232,270 @@ static int is_pasv_active(session_t *sess)
     priv_sock_send_cmd(sess->proto_fd,PRIV_SOCK_PASV_ACTIVE);
     return priv_sock_recv_int(sess->proto_fd);
 }
+
+static void get_port_data_fd(session_t *sess)
+{
+        priv_sock_send_cmd(sess->proto_fd,PRIV_SOCK_GET_DATA_SOCK);
+        char *ip = inet_ntoa(sess->p_addr->sin_addr);
+        uint16_t port = ntohs(sess->p_addr->sin_port);
+        priv_sock_send_str(sess->proto_fd,ip,strlen(ip));
+        priv_sock_send_int(sess->proto_fd,port);
+
+        //recv result
+        char result = priv_sock_recv_result(sess->proto_fd);
+        if(result == PRIV_SOCK_RESULT_BAD)
+        {
+            fprintf(stderr,"get data fd err");
+            exit(EXIT_FAILURE);
+        }
+        sess->data_fd=priv_sock_recv_fd(sess->proto_fd);
+
+        free(sess->p_addr);
+        sess->p_addr=NULL;
+
+}
+static void get_pasv_data_fd(session_t *sess)
+{
+        priv_sock_send_cmd(sess->proto_fd,PRIV_SOCK_PASV_ACCEPT);
+        char res=priv_sock_recv_result(sess->proto_fd);
+        
+        if(res==PRIV_SOCK_RESULT_BAD)
+        {
+             ftp_reply(sess, FTP_BADCMD, "get pasv data_fd error");
+            fprintf(stderr,"get data fd error");
+            exit(EXIT_FAILURE);
+        }
+        sess->data_fd = priv_sock_recv_fd(sess->proto_fd);
+        //清除PASV模式
+        close(sess->listen_fd);
+        sess->listen_fd=-1;
+
+}
+/*
+void upload_file(session_t *sess,int is_appe)
+{
+    //获取fd
+    if(get_trans_data_fd(sess) ==0)
+    {
+        ftp_reply(sess,FTP_UPLOADFAIL,"Failed to get data fd.");
+        return;
+    }
+    //open file
+    int fd= open(sess->args,O_WRONLY|O_CREAT,0755);
+    if(fd == -1)
+    {
+        ftp_reply(sess,FTP_UPLOADFAIL, "Failed to open file.");
+        return;
+    }
+    //lock file
+    if(lock_file_write(fd)==-1)
+    {
+     ftp_reply(sess, FTP_UPLOADFAIL, "Failed to lock file.");
+     return;
+    }
+    //judge regular file
+    struct stat sbuf;
+    if(fstat(fd,&sbuf) ==-1)
+    {
+        ERR_EXIT("lstat");
+    }
+    if(!S_ISREG(sbuf.st_mode))
+    {
+        ftp_reply(sess,FTP_UPLOADFAIL,"Can only upload regular file.");
+        return;
+    }
+    //breakpoint 
+    uint64_t offset= sess->restart_pos;
+    unsigned long filesize = 0;
+    //区分模式 APPE or REST+STOR
+    if(!is_appe && offset ==0)  //normally STOR
+    {
+        //截断函数
+        ftruncate(fd,0); //如果源文件存在则直接覆盖
+    }
+    else if(!is_appe && offset != 0) //rest+stor
+    {
+        ftruncate(fd,offset);
+        if(lseek(fd,offset,SEEK_SET)==-1)
+            ERR_EXIT("lseek");
+        filesize= offset;
+    }
+    else
+    {
+        //对文件进行扩展 偏移到末尾进行追加
+        if(lseek(fd,0,SEEK_END) == -1)
+            ERR_EXIT("lseek");
+        if(fstat(fd,&sbuf) == -1)
+            ERR_EXIT("fstat");
+        filesize = sbuf.st_size;
+    }
+    //ascii
+    char text[1024] = {0};
+     if(sess->ascii_mode == 1)
+         snprintf(text, sizeof text, "Opening ASCII mode data connection for %s (%lu bytes).", sess->args, filesize);
+    else
+          snprintf(text, sizeof text, "Opening Binary mode data connection for %s (%lu bytes).", sess->args, filesize);
+    printf("11111\n");
+     ftp_reply(sess, FTP_DATACONN, text);
+    
+    //upload
+
+    char buf[4096]={0};
+    int flag =0;
+    while(1)
+    {
+        int ret = read(sess->data_fd,buf,sizeof buf);
+        if(ret == -1)
+        {
+            if(errno == EINTR)
+                continue;
+            flag =1;
+            break;
+        }
+        else if(ret ==0)
+        {
+            flag =0;
+            break;
+        }
+        if(writen(fd,buf,ret) !=ret)
+        {
+            flag =2;
+            break;
+        }
+         
+    }
+    //unlock file
+    if(unlock_file(fd)==-1)
+    {
+        fprintf(stderr,"unlock error");
+        return;
+    }
+    //close
+    close(fd);
+    close(sess->data_fd);
+    sess->data_fd =-1;
+
+    if(flag ==0)
+        ftp_reply(sess,FTP_TRANSFEROK,"Transfer complete.");
+    if(flag ==1)
+        ftp_reply(sess,FTP_BADSENDNET,"Reading from Network error.");
+    if(flag == 2)
+        ftp_reply(sess,FTP_BADSENDFILE,"Writing to File Failed.");
+}
+*/
+
+void upload_file(session_t *sess, int is_appe)
+{
+    //获取data fd
+    if(get_trans_data_fd(sess) == 0)
+    {
+        ftp_reply(sess, FTP_UPLOADFAIL, "Failed to get data fd."); 
+        return;
+    }
+        
+    //open 文件
+    int fd = open(sess->args, O_WRONLY | O_CREAT, 0666);
+    if(fd == -1)
+    {
+        ftp_reply(sess, FTP_UPLOADFAIL, "Failed to open file."); 
+        return;
+    }
+
+    //对文件加锁
+    if(lock_file_write(fd) == -1)
+    {
+        ftp_reply(sess, FTP_UPLOADFAIL, "Failed to lock file."); 
+        return;
+    }
+
+    //判断是否是普通文件
+    struct stat sbuf;
+    if(fstat(fd, &sbuf) == -1)
+        ERR_EXIT("fstat");
+    if(!S_ISREG(sbuf.st_mode))
+    {
+        ftp_reply(sess, FTP_UPLOADFAIL, "Can only upload regular file."); 
+        return;
+    }
+
+    //区分模式
+    long long offset = sess->restart_pos;
+    unsigned long filesize = 0;
+    if(!is_appe && offset == 0) //STOR
+    {
+        //创建新的文件
+        ftruncate(fd, 0);   //如果源文件存在则直接覆盖
+    }
+    else if(!is_appe && offset != 0) // REST + STOR
+    {
+        //lseek进行偏移
+        ftruncate(fd, offset);  //截断后面的内容
+        if(lseek(fd, offset, SEEK_SET) == -1)
+            ERR_EXIT("lseek");
+        filesize = offset;
+    }
+    else    //APPE
+    {
+        //对文件进行扩展 偏移到末尾进行追加
+        if(lseek(fd, 0, SEEK_END) == -1)
+            ERR_EXIT("lseek");
+
+        //获取文件大小
+        if(fstat(fd, &sbuf) == -1)
+            ERR_EXIT("fstat");
+        filesize = sbuf.st_size;
+    }
+
+    //150 ascii
+    //150 Opening ASCII mode data connection for /home/wing/redis-stable.tar.gz (1251318 bytes).
+    char text[1024] = {0};
+    if(sess->ascii_mode == 1)
+        snprintf(text, sizeof text, "Opening ASCII mode data connection for %s (%lu bytes).", sess->args, filesize);
+    else
+        snprintf(text, sizeof text, "Opening Binary mode data connection for %s (%lu bytes).", sess->args, filesize);
+    ftp_reply(sess, FTP_DATACONN, text);
+
+    //上传
+    char buf[4096] = {0};
+    int flag = 0;
+    while(1)
+    {
+        int nread = read(sess->data_fd, buf, sizeof buf);
+        if(nread == -1)
+        {
+            if(errno == EINTR)
+                continue;
+            flag = 1;
+            break;
+        }
+        else if(nread == 0)
+        {
+            flag = 0;
+            break;
+        }
+
+        if(writen(fd, buf, nread) != nread)
+        {
+            flag = 2;
+            break;
+        }
+    }
+
+    //清理 关闭fd 文件解锁
+    if(unlock_file(fd) == -1)
+        ERR_EXIT("unlock_file");
+    close(fd);
+    close(sess->data_fd);
+    sess->data_fd = -1;
+
+
+    //226
+    if(flag == 0)
+        ftp_reply(sess, FTP_TRANSFEROK, "Transfer complete.");
+    else if(flag == 1)
+        ftp_reply(sess, FTP_BADSENDNET, "Reading from Network Failed.");
+    else
+        ftp_reply(sess, FTP_BADSENDFILE, "Writing to File Failed.");
+
+}
+

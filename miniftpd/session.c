@@ -7,14 +7,22 @@ void session_init(session_t *sess)
     sess->peerfd = -1;
     sess->nobody_fd = -1;
     sess->proto_fd = -1;
+
     sess->user_uid=0;
     sess->ascii_mode=0;
+
     memset(sess->command,0x00,sizeof(sess->command));
     memset(sess->comm,0x00,sizeof(sess->comm));
     memset(sess->args,0x00,sizeof(sess->args));
+
     sess->p_addr=NULL;
+
    sess->data_fd = -1;
    sess->listen_fd = -1;
+
+   sess->restart_pos=0;
+   
+   sess->rnfr_name=NULL;
 }
 
 void session_begin(session_t *sess)

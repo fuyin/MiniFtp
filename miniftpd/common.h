@@ -29,7 +29,8 @@
 #include <sys/syscall.h>
 #include <bits/syscall.h>
 #include <sys/sendfile.h>
-
+#include <sys/time.h>
+#include <assert.h>
 #define ERR_EXIT(m) \
     do { \
         perror(m);\

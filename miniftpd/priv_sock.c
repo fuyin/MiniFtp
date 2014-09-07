@@ -1,6 +1,7 @@
 #include "priv_sock.h"
 #include "common.h"
 #include "sysutil.h"
+#include "trans_ctrl.h"
 
 
 void priv_sock_init(session_t *sess)
@@ -43,6 +44,7 @@ void priv_sock_set_proto_context(session_t *sess)
         close(sess->nobody_fd);
         sess->nobody_fd = -1;
     }
+   //setup_signal_alarm_ctrl_fd(); 可以在这儿设置定时器
 }
 
 void priv_sock_send_cmd(int fd, char cmd)
@@ -65,6 +67,11 @@ char priv_sock_recv_cmd(int fd)
 {
     char res;
     int ret = readn(fd, &res, sizeof res);
+    if(ret ==0)
+    {
+        printf("proto close");
+        exit(EXIT_SUCCESS);
+    }
 
     if(ret != sizeof(res))
     {

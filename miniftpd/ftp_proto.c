@@ -3,13 +3,16 @@
 #include "sysutil.h"
 #include "strutil.h"
 #include "command_map.h"
+#include "trans_ctrl.h"
 //#define DEBUG
 void clean_command(session_t *);
 void handle_proto(session_t *sess)
 {
           ftp_reply(sess,FTP_GREET,"FTP Server 1.0");
+          setup_signal_alarm_ctrl_fd();
         while(1)
         {
+           start_signal_alarm_ctrl_fd();
           int ret = readline(sess->peerfd,sess->command,1024 );
           if(ret==-1 )
           {

@@ -24,6 +24,16 @@ typedef struct
     uint64_t restart_pos; //文件传输断点
 
     char * rnfr_name;  //文件重命名 RNTR RNTO
+
+    int limits_max_upload;
+    int limits_max_download;
+    int start_time_sec;
+    int start_time_usec;
+
+    int is_translating_data;
+
+    int curr_clients;
+    int curr_ip_clients;
 }session_t;
  int clientcount;
 void session_init(session_t *sess);

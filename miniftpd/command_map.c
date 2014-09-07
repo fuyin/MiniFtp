@@ -1,6 +1,5 @@
 #include "command_map.h"
 #include "trans_data.h"
-#include "trans_data.h"
 #include "sysutil.h"
 #include "ftp_code.h"
 #include "strutil.h"
@@ -277,86 +276,7 @@ void do_mode(session_t *sess)
 
 void do_retr(session_t *sess)
 {
-    //获取fd
-    if(get_trans_data_fd(sess) == 0)
-    {
-        ftp_reply(sess,FTP_FILEFAIL,"Failed to open file");
-        return;
-    }
-
-    //open文件
-    int fd=open(sess->args,O_RDONLY);
-    //文件加锁
-    if(lock_file_read(fd)== -1)
-    {
-        ftp_reply(sess,FTP_FILEFAIL,"Failed to open file.");
-    }
-    //判断是否为普通文件
-    struct stat sbuf;
-    if(fstat(fd,&sbuf) == -1)
-        ERR_EXIT("fstat");
-    if(!S_ISREG(sbuf.st_mode))
-    {
-        ftp_reply(sess,FTP_FILEFAIL,"Can only open regular file.");
-    }
-    //150 ascII
-    char text[1024]={0};
-    if(sess->ascii_mode == 1)
-    {
-        snprintf(text,sizeof text,"Opening ASCII mode data connection for %s(%lu bytes)",sess->args,sbuf.st_size);
-    }
-    else
-        snprintf(text,sizeof text,"Opening binary mode data connection for %s(%lu bytes)",sess->args,sbuf.st_size);
-    ftp_reply(sess,FTP_DATACONN,text);
-
-    //断点续传
-    unsigned long filesize= sbuf.st_size;
-    int offset = sess->restart_pos;
-    if(offset != 0)
-    {
-        filesize-=offset;
-    }
-    if(lseek(fd,offset,SEEK_SET)==-1)
-        ERR_EXIT("lseek");
-
-    //传输
-    int flag=0;//记录下载的结果
-    int nleft = sbuf.st_size;//剩余字节
-    int block_size=0;//一次传输字节
-    const int kSize=4096;
-    while(1)
-    {
-        block_size = (nleft > kSize)?kSize:nleft;
-        int nwrite= sendfile(sess->data_fd,fd,NULL,block_size);
-
-        if(nwrite==-1)
-        {
-            if(errno==EINTR)
-                continue;
-            flag=1;
-            break;
-        }
-        nleft-=nwrite;
-        if(nleft == 0)
-        {   
-        flag =0;
-        break;
-        }
-    }
-
-    //清理关闭fd,文件解锁
-    if(unlock_file(fd)== -1)
-        ERR_EXIT("unlock_file");
-    close(sess->data_fd);
-    close(fd);
-    //226
-    if(flag == 0)
-    ftp_reply(sess,FTP_TRANSFEROK,"Transfer complete.");
-    else if(flag ==1)
-    ftp_reply(sess,FTP_FILEFAIL, "Transfer complete.");
-    else if(flag== 2)
-        ftp_reply(sess,FTP_FILEFAIL,"Net work writing failed.");
-
+    download_file(sess);
 }
 
 void do_stor(session_t *sess)
@@ -527,7 +447,7 @@ void do_syst(session_t *sess)
 void do_feat(session_t *sess)
 {
     //211-Features:
-    ftp_lreply(sess, FTP_FEAT, "Features:");
+   ftp_lreply(sess, FTP_FEAT, "Features:");
 
     //EPRT
     writen(sess->peerfd, " EPRT\r\n", strlen(" EPRT\r\n"));
